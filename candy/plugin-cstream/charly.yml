@@ -1,0 +1,52 @@
+version: 2026.232.0520
+plugin-cstream:
+    candy:
+        version: 2026.242.0800
+        description: |-
+            OUT-OF-TREE charly plugin serving the `cstream` check verb — the probes
+            that can only be answered from the STREAM side of a cstream deployment,
+            served OUT-OF-PROCESS over go-plugin gRPC via the charly plugin SDK.
+
+            Why a verb of its own rather than methods on `wl:`. `screenshot` already
+            exists on four verbs (cdp, wl, vnc, spice), each asserting its own
+            protocol's view of the pixels, and that duplication is deliberate: a
+            probe is worth having only if it can fail on the defect it exists to
+            catch. `wl: screenshot` reads the COMPOSITOR, so it passes cleanly while
+            the encoder is misconfigured or the transport is dead. `cstream: frame`
+            pulls a frame back out THROUGH the negotiated WebRTC track, so encoding,
+            negotiation and transport are all in its failure path. Folding it into
+            `wl:` would produce a probe that cannot fail on the bug it was written
+            for.
+
+            SCOPE IS DELIBERATELY NARROW — three methods, not the eleven the
+            architecture eventually wants. `status`, `frame` and `login` are served
+            because the deployment can actually answer them today. `session-list`,
+            `stats`, `volume`, `clipboard`, `idle`, `input` and `logout` are NOT:
+            the streamer has no control surface behind them yet, and a method that
+            cannot be exercised reads as coverage while providing none. They arrive
+            with the ctl socket.
+
+            The plugin owns no podman/venue machinery. It uses BOTH reverse legs
+            because the two halves of the deployment are reachable differently:
+            `ResolveEndpoint` for the gateway's HTTP surface, and
+            `ExecutorFromInvoke` for anything that must run inside the venue (the
+            WebRTC consumer pull, and authenticating through the session leader).
+        plugin:
+            source: github.com/opencharly/plugin-cstream/candy/plugin-cstream
+            providers:
+                - verb:cstream
+            # primary: is load-bearing, not sugar-for-taste. charly's pre-parse
+            # collectPluginPrimaries reads it off the RAW yaml, so the scalar form
+            # (`cstream: status`) only works when the candy manifest declares it.
+            primary:
+                cstream: method
+        plan:
+            - check: the cstream verb dispatches through the provider registry and reports the gateway's own readiness view on a live deployment
+              id: cstream-verb-dispatches
+              cstream: status
+              stdout:
+                - contains: '"ready":true'
+              eventually: 120s
+              retry_interval: 15s
+              context:
+                - runtime
