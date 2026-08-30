@@ -58,5 +58,5 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 
 	// No method here produces an artifact yet -- `frame` would, and is withheld
 	// until WP3d explains why a negotiated session carries no media.
-	return sdk.VerbVerdict("cstream", method, out, runErr, &op, false)
+	return sdk.VerbVerdict("cstream", method, out, runErr, &op, in.Artifact != "")
 }

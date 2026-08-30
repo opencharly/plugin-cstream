@@ -1,7 +1,7 @@
 version: 2026.232.0520
 plugin-cstream:
     candy:
-        version: 2026.242.0800
+        version: 2026.242.1500
         description: |-
             OUT-OF-TREE charly plugin serving the `cstream` check verb — the probes
             that can only be answered from the STREAM side of a cstream deployment,

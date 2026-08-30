@@ -19,18 +19,24 @@
 	//           which is strictly more than "the port answers"
 	//   login   one PAM authentication through the real session leader
 	//
-	// `frame` -- a frame pulled back THROUGH the negotiated WebRTC track -- is the
-	// method this verb ultimately exists for, because wl: screenshot reads the
-	// compositor and so cannot fail on an encoding or transport defect. It is NOT
-	// offered yet: signalling negotiates a session end-to-end and no media follows
-	// (WP3d, cause not yet understood). Offering a method whose gate cannot pass
-	// would read as coverage while providing none.
+	//   frame   a frame pulled back THROUGH the negotiated WebRTC track. This is
+	//           the method the verb ultimately exists for: `wl: screenshot` reads
+	//           the COMPOSITOR and `stream-probe` reads the producer's own tap, so
+	//           neither can fail on an encoding or transport defect. This one
+	//           decodes what a real consumer receives, so it fails on a broken
+	//           encoder, a broken negotiation, or a broken transport.
+	//
+	// `frame` was deliberately withheld until it could be gated. The defect that
+	// kept it unshippable is on record and fixed: gst-plugins-bad was missing, so
+	// webrtcbin did not exist and webrtcsink failed to build its session pipeline
+	// with a WARN -- sessions negotiated, no media followed, and no ICE or DTLS
+	// error surfaced. Producer-side checks all passed throughout.
 	//
 	// Methods the architecture also lists (session-list, stats, volume, clipboard,
 	// idle, input, logout) are NOT served yet: the control surface they read does
 	// not exist in the streamer, and a method that cannot be exercised reads as
 	// coverage while providing none.
-	method: "status" | "login"
+	method: "status" | "login" | "frame"
 
 	// user / password — `login` only.
 	//
@@ -55,5 +61,31 @@
 	// happily against a stack that accepts anything, so the rejecting case has to
 	// be expressible.
 	expect?: "accept" | "reject"
+
+	// artifact — `frame` only: the HOST path the decoded frame is written to.
+	//
+	// The frame is captured in the venue, pulled back over the executor's reverse
+	// channel (GetFile) and written here BEFORE the provider's artifact validators
+	// run, so artifact_min_bytes / artifact_not_uniform gate the bytes a consumer
+	// actually received rather than anything the producer merely claims.
+	//
+	// Without a gate on the CONTENT this method would be theatre: a stream that
+	// negotiates and sends nothing, or sends a uniform placeholder, is exactly the
+	// failure mode it exists to catch.
+	artifact?: string
+
+	// The artifact VALIDATORS. These are not general #Op modifiers -- they left
+	// core #Op in the schema-compaction cutover, so every verb that writes an
+	// artifact declares its own (plugin-wl carries the same four). Without them
+	// declared here an authored step fails host validation with
+	// `#CstreamInput.artifact_min_bytes: field not allowed`, which is how this
+	// omission was found.
+	//
+	// artifact_not_uniform is the one that matters: a stream that negotiates and
+	// then sends a black or placeholder frame is precisely the failure this method
+	// exists to catch, and a byte-count alone would pass it.
+	artifact_min_bytes?:       int & >=0 @go(ArtifactMinBytes,type=int)
+	artifact_min_dimensions?:  string & =~"^[0-9]+x[0-9]+$" @go(ArtifactMinDimensions)
+	artifact_not_uniform?:     bool @go(ArtifactNotUniform)
 
 }
