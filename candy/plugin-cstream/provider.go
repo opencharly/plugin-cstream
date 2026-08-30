@@ -56,7 +56,7 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 
 	out, runErr := dispatch(ctx, req, &op, &in, &env)
 
-	// `frame` is the one artifact-producing method, so it is the only one whose
-	// artifact validators (min bytes / not uniform) run.
-	return sdk.VerbVerdict("cstream", method, out, runErr, &op, method == "frame")
+	// No method here produces an artifact yet -- `frame` would, and is withheld
+	// until WP3d explains why a negotiated session carries no media.
+	return sdk.VerbVerdict("cstream", method, out, runErr, &op, false)
 }

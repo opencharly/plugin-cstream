@@ -15,16 +15,10 @@ import (
 // address through the generic endpoint reverse-leg, never assumed to be published.
 const gatewayPort = 8080
 
-// framePath is where the in-venue probe writes the frame it pulls off the track,
-// before it is fetched back over the reverse channel to the authored artifact path.
-const framePath = "/tmp/cstream-consumed.jpg"
-
 func dispatch(ctx context.Context, req *pb.InvokeRequest, op *spec.Op, in *params.CstreamInput, env *cstreamEnv) (string, error) {
 	switch in.Method {
 	case "status":
 		return statusMethod(ctx, req, env)
-	case "frame":
-		return frameMethod(ctx, req, in)
 	case "login":
 		return loginMethod(ctx, req, in)
 	default:
@@ -60,33 +54,6 @@ func statusMethod(ctx context.Context, req *pb.InvokeRequest, env *cstreamEnv) (
 	return body, nil
 }
 
-// frameMethod pulls a frame back out THROUGH the negotiated WebRTC track.
-//
-// This is the method the verb exists for. wl: screenshot reads the compositor, so
-// it passes while the encoder is misconfigured or the transport is dead; this
-// negotiates as a real consumer, so encoding, negotiation and transport are all
-// in its failure path.
-func frameMethod(ctx context.Context, req *pb.InvokeRequest, in *params.CstreamInput) (string, error) {
-	ex, err := sdk.ExecutorFromInvoke(req.GetExecutorBrokerId())
-	if err != nil {
-		return "", fmt.Errorf("cstream: frame has no host executor attached — it must run inside the venue (%w)", err)
-	}
-	out, err := ex.VenueCapture(ctx, fmt.Sprintf("/usr/local/bin/cstream-frame-probe %s", framePath))
-	if err != nil {
-		return out, fmt.Errorf("cstream: frame: %w", err)
-	}
-	if in.Artifact != "" {
-		data, err := ex.GetFile(ctx, framePath, false)
-		if err != nil {
-			return out, fmt.Errorf("cstream: frame: fetching %s off the venue: %w", framePath, err)
-		}
-		if err := writeArtifact(in.Artifact, data); err != nil {
-			return out, fmt.Errorf("cstream: frame: %w", err)
-		}
-	}
-	return out, nil
-}
-
 // loginMethod authenticates one credential through the REAL session leader.
 //
 // `expect` is not optional decoration. A login probe that only ever checks the
@@ -94,8 +61,14 @@ func frameMethod(ctx context.Context, req *pb.InvokeRequest, in *params.CstreamI
 // so the rejecting case has to be assertable — and the two legs are only
 // meaningful together, against the same stack and the same account.
 //
-// The password goes over stdin, never argv: argv is world-readable through
-// /proc/<pid>/cmdline for the whole life of the process.
+// ⚠️ The password is NOT private on this path. The executor exposes only
+// VenueCapture(ctx, cmd string), so the credential travels inside a command
+// string and ends up in `sh -c` argv — world-readable via /proc/<pid>/cmdline.
+// That is why the schema restricts this method to fixture credentials.
+//
+// The leader itself reads its credential from STDIN precisely to avoid this, and
+// the production route (broker execs leader over a socketpair) keeps that
+// property. This verb cannot, and says so rather than implying otherwise.
 func loginMethod(ctx context.Context, req *pb.InvokeRequest, in *params.CstreamInput) (string, error) {
 	if in.User == "" {
 		return "", fmt.Errorf("cstream: login needs a user")

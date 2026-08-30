@@ -17,21 +17,36 @@
 	//   status  the gateway's own readiness view -- it reports ready only when a
 	//           DRM render node exists AND the compositor has published a socket,
 	//           which is strictly more than "the port answers"
-	//   frame   a frame pulled back out THROUGH the negotiated WebRTC track, so
-	//           encoding, negotiation and transport are all in the failure path.
-	//           This is the method the verb exists for: wl: screenshot reads the
-	//           compositor and so cannot fail on any of them.
 	//   login   one PAM authentication through the real session leader
+	//
+	// `frame` -- a frame pulled back THROUGH the negotiated WebRTC track -- is the
+	// method this verb ultimately exists for, because wl: screenshot reads the
+	// compositor and so cannot fail on an encoding or transport defect. It is NOT
+	// offered yet: signalling negotiates a session end-to-end and no media follows
+	// (WP3d, cause not yet understood). Offering a method whose gate cannot pass
+	// would read as coverage while providing none.
 	//
 	// Methods the architecture also lists (session-list, stats, volume, clipboard,
 	// idle, input, logout) are NOT served yet: the control surface they read does
 	// not exist in the streamer, and a method that cannot be exercised reads as
 	// coverage while providing none.
-	method: "status" | "frame" | "login"
+	method: "status" | "login"
 
-	// user / password — `login` only. The password reaches the leader over stdin,
-	// never argv: argv is world-readable through /proc/<pid>/cmdline for the life
-	// of the process.
+	// user / password — `login` only.
+	//
+	// ⚠️ THIS PASSWORD IS NOT PRIVATE. The venue executor exposes only
+	// VenueCapture(ctx, cmd string) — there is no stdin channel to an
+	// out-of-process verb — so the value reaches the venue inside a command
+	// string and lands in `sh -c` argv, which is world-readable through
+	// /proc/<pid>/cmdline for the life of that exec.
+	//
+	// So `cstream: login` is for FIXTURE credentials: an account a disposable bed
+	// created in order to be authenticated. Do not point it at a real one.
+	//
+	// The production path does not have this property and must not grow it: the
+	// broker (root) execs the leader over a socketpair and the leader reads the
+	// credential from STDIN, never argv. That discipline is deliberate and is
+	// tested; this verb simply cannot reach it through the executor it is given.
 	user?:     string
 	password?: string
 
@@ -41,10 +56,4 @@
 	// be expressible.
 	expect?: "accept" | "reject"
 
-	// artifact — `frame` only: where to write the pulled frame.
-	artifact?: string
-	// artifact_min_bytes — a size floor. A uniform field compresses to almost
-	// nothing, so this is the cheap content guard against a black or placeholder
-	// frame passing as a real one.
-	artifact_min_bytes?: int @go(ArtifactMinBytes,type=int)
 }
