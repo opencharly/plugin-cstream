@@ -4,10 +4,8 @@ package params
 
 // CstreamInput is the typed plugin_input for a `cstream:` check step.
 type CstreamInput struct {
-	Method           string `json:"method"`
-	User             string `json:"user,omitempty"`
-	Password         string `json:"password,omitempty"`
-	Expect           string `json:"expect,omitempty"`
-	Artifact         string `json:"artifact,omitempty"`
-	ArtifactMinBytes int    `json:"artifact_min_bytes,omitempty"`
+	Method   string `json:"method"`
+	User     string `json:"user,omitempty"`
+	Password string `json:"password,omitempty"`
+	Expect   string `json:"expect,omitempty"`
 }

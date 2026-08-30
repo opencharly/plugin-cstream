@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -34,16 +32,4 @@ func httpGet(ctx context.Context, url string) (string, error) {
 		return string(body), fmt.Errorf("gateway returned %s", resp.Status)
 	}
 	return string(body), nil
-}
-
-// writeArtifact writes fetched bytes to the authored artifact path, creating the
-// parent directory. Refusing to create it would make `artifact:` fail for a
-// reason that has nothing to do with the stream.
-func writeArtifact(path string, data []byte) error {
-	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("creating the artifact directory %s: %w", dir, err)
-		}
-	}
-	return os.WriteFile(path, data, 0o644)
 }
