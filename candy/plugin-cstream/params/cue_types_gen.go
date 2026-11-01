@@ -18,17 +18,17 @@ type CstreamInput struct {
 	// The set is deliberately small. Each method is here because it can FAIL on a
 	// defect nothing else catches:
 	//
-	//   status  the gateway's own readiness view -- it reports ready only when a
-	//           DRM render node exists AND the compositor has published a socket,
-	//           which is strictly more than "the port answers"
-	//   login   one PAM authentication through the real session leader
+	//	status  the gateway's own readiness view -- it reports ready only when a
+	//	        DRM render node exists AND the compositor has published a socket,
+	//	        which is strictly more than "the port answers"
+	//	login   one PAM authentication through the real session leader
 	//
-	//   frame   a frame pulled back THROUGH the negotiated WebRTC track. This is
-	//           the method the verb ultimately exists for: `wl: screenshot` reads
-	//           the COMPOSITOR and `stream-probe` reads the producer's own tap, so
-	//           neither can fail on an encoding or transport defect. This one
-	//           decodes what a real consumer receives, so it fails on a broken
-	//           encoder, a broken negotiation, or a broken transport.
+	//	frame   a frame pulled back THROUGH the negotiated WebRTC track. This is
+	//	        the method the verb ultimately exists for: `wl: screenshot` reads
+	//	        the COMPOSITOR and `stream-probe` reads the producer's own tap, so
+	//	        neither can fail on an encoding or transport defect. This one
+	//	        decodes what a real consumer receives, so it fails on a broken
+	//	        encoder, a broken negotiation, or a broken transport.
 	//
 	// `frame` was deliberately withheld until it could be gated. The defect that
 	// kept it unshippable is on record and fixed: gst-plugins-bad was missing, so
