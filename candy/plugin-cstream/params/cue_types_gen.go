@@ -18,17 +18,17 @@ type CstreamInput struct {
 	// The set is deliberately small. Each method is here because it can FAIL on a
 	// defect nothing else catches:
 	//
-	//	status  the gateway's own readiness view -- it reports ready only when a
-	//	        DRM render node exists AND the compositor has published a socket,
-	//	        which is strictly more than "the port answers"
-	//	login   one PAM authentication through the real session leader
+	//   status  the gateway's own readiness view -- it reports ready only when a
+	//           DRM render node exists AND the compositor has published a socket,
+	//           which is strictly more than "the port answers"
+	//   login   one PAM authentication through the real session leader
 	//
-	//	frame   a frame pulled back THROUGH the negotiated WebRTC track. This is
-	//	        the method the verb ultimately exists for: `wl: screenshot` reads
-	//	        the COMPOSITOR and `stream-probe` reads the producer's own tap, so
-	//	        neither can fail on an encoding or transport defect. This one
-	//	        decodes what a real consumer receives, so it fails on a broken
-	//	        encoder, a broken negotiation, or a broken transport.
+	//   frame   a frame pulled back THROUGH the negotiated WebRTC track. This is
+	//           the method the verb ultimately exists for: `wl: screenshot` reads
+	//           the COMPOSITOR and `stream-probe` reads the producer's own tap, so
+	//           neither can fail on an encoding or transport defect. This one
+	//           decodes what a real consumer receives, so it fails on a broken
+	//           encoder, a broken negotiation, or a broken transport.
 	//
 	// `frame` was deliberately withheld until it could be gated. The defect that
 	// kept it unshippable is on record and fixed: gst-plugins-bad was missing, so
@@ -40,7 +40,7 @@ type CstreamInput struct {
 	// idle, input, logout) are NOT served yet: the control surface they read does
 	// not exist in the streamer, and a method that cannot be exercised reads as
 	// coverage while providing none.
-	Method string `yaml:"method,omitempty" json:"method"`
+	Method string `json:"method"`
 
 	// user / password — `login` only.
 	//
@@ -57,15 +57,15 @@ type CstreamInput struct {
 	// broker (root) execs the leader over a socketpair and the leader reads the
 	// credential from STDIN, never argv. That discipline is deliberate and is
 	// tested; this verb simply cannot reach it through the executor it is given.
-	User string `yaml:"user,omitempty" json:"user,omitempty"`
+	User string `json:"user,omitempty"`
 
-	Password string `yaml:"password,omitempty" json:"password,omitempty"`
+	Password string `json:"password,omitempty"`
 
 	// expect — `login` only: whether this credential SHOULD be accepted.
 	// A login probe that only ever checks the correct password passes just as
 	// happily against a stack that accepts anything, so the rejecting case has to
 	// be expressible.
-	Expect string `yaml:"expect,omitempty" json:"expect,omitempty"`
+	Expect string `json:"expect,omitempty"`
 
 	// artifact — `frame` only: the HOST path the decoded frame is written to.
 	//
@@ -77,7 +77,7 @@ type CstreamInput struct {
 	// Without a gate on the CONTENT this method would be theatre: a stream that
 	// negotiates and sends nothing, or sends a uniform placeholder, is exactly the
 	// failure mode it exists to catch.
-	Artifact string `yaml:"artifact,omitempty" json:"artifact,omitempty"`
+	Artifact string `json:"artifact,omitempty"`
 
 	// The artifact VALIDATORS. These are not general #Op modifiers -- they left
 	// core #Op in the schema-compaction cutover, so every verb that writes an
@@ -89,9 +89,9 @@ type CstreamInput struct {
 	// artifact_not_uniform is the one that matters: a stream that negotiates and
 	// then sends a black or placeholder frame is precisely the failure this method
 	// exists to catch, and a byte-count alone would pass it.
-	ArtifactMinBytes int `yaml:"artifact_min_bytes,omitempty" json:"artifact_min_bytes,omitempty"`
+	ArtifactMinBytes int `json:"artifact_min_bytes,omitempty"`
 
-	ArtifactMinDimensions string `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"`
+	ArtifactMinDimensions string `json:"artifact_min_dimensions,omitempty"`
 
-	ArtifactNotUniform bool `yaml:"artifact_not_uniform,omitempty" json:"artifact_not_uniform,omitempty"`
+	ArtifactNotUniform bool `json:"artifact_not_uniform,omitempty"`
 }
