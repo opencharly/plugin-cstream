@@ -1,0 +1,72 @@
+#!/bin/bash
+# stream-probe — prove the stream carries LIVE compositor content.
+#
+# A service check proves a process is up, and "the frame is not uniform" passes on a
+# wallpaper -- a frozen pipeline serving one static frame forever satisfies both. So
+# this probe compares frames pulled THROUGH the streamer's own pipeline (its frame tap,
+# CSTREAM_FRAME_DIR) before and after a real client window maps: a dead, frozen or
+# placeholder pipeline yields identical frames and fails.
+#
+# The client maps on the STREAMER'S OWN compositor (waylanddisplaysrc's socket), not on
+# whatever desktop is nested in it. That keeps the probe compositor-agnostic -- it
+# holds for any desktop or none -- and it is the stricter test: the parent composites
+# the new window over everything, so the only way the tap stays unchanged is a pipeline
+# that is not carrying live content.
+#
+# Every wait is a bounded condition poll that ends the moment its condition holds; the
+# 60-second bounds fail the probe with a named cause instead of hanging the bed.
+set -e
+exec > >(tee -a /tmp/stream-probe.log) 2>&1
+echo "=== probe run $(date -u +%H:%M:%S) ==="
+
+FRAMES=/tmp/cstream-frames
+export XDG_RUNTIME_DIR=/tmp/cstream-rt
+
+echo "STREAM-CTX: $(id -un 2>/dev/null) uid=$(id -u 2>/dev/null) XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+echo "STREAM-CTX: frames-dir readable=$([ -r "$FRAMES" ] && echo yes || echo NO) foot=$(command -v foot >/dev/null 2>&1 && echo present || echo MISSING)"
+
+newest() { ls -t "$FRAMES"/*.jpg 2>/dev/null | head -1; }
+
+# The streamer's compositor socket: the numbered wayland-N it created in its runtime
+# dir. A nested desktop's socket (wayland-kde, ...) is not numbered and is not chosen.
+PARENT=""
+for _ in $(seq 1 60); do
+    PARENT=$(ls "$XDG_RUNTIME_DIR" 2>/dev/null | grep -m1 -E '^wayland-[0-9]+$' || true)
+    [ -n "$PARENT" ] && break
+    sleep 1
+done
+[ -n "$PARENT" ] || { echo "STREAM-FAIL: the streamer published no Wayland socket in $XDG_RUNTIME_DIR"; exit 1; }
+echo "STREAM-CTX: parent socket $PARENT"
+
+f=""
+for _ in $(seq 1 60); do
+    f=$(newest); [ -n "$f" ] && [ -s "$f" ] && break
+    f=""; sleep 1
+done
+[ -n "$f" ] || { echo "STREAM-FAIL: the streamer pipeline never produced a frame"; exit 1; }
+A=$(sha256sum "$f" | cut -d' ' -f1)
+echo "STREAM-FRAME-A: $(stat -c%s "$f") bytes sha=${A:0:16}"
+
+echo "STREAM-STEP: mapping a client window on the streamer's own compositor"
+# A solid, distinctive background makes the change unmistakable whatever was on
+# screen before.
+WAYLAND_DISPLAY="$PARENT" foot -o colors-dark.background=c02060 -e sleep 30 >/dev/null 2>&1 &
+CLIENT=$!
+trap 'kill "$CLIENT" 2>/dev/null || true' EXIT
+
+B=""; Bf=""
+for _ in $(seq 1 60); do
+    g=$(newest)
+    if [ -n "$g" ] && [ "$g" != "$f" ]; then
+        h=$(sha256sum "$g" | cut -d' ' -f1)
+        if [ "$h" != "$A" ]; then B="$h"; Bf="$g"; break; fi
+    fi
+    sleep 1
+done
+if [ -z "$B" ]; then
+    echo "STREAM-FAIL: no frame differing from A after the window mapped --"
+    echo "STREAM-FAIL: the pipeline is not carrying live compositor content"
+    exit 1
+fi
+echo "STREAM-FRAME-B: $(stat -c%s "$Bf") bytes sha=${B:0:16}"
+echo "STREAM-LIVE-OK: pipeline output changed when the desktop changed"

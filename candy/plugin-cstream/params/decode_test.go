@@ -27,10 +27,17 @@ var schemaKeys = []string{
 	"artifact_min_bytes",
 	"artifact_min_dimensions",
 	"artifact_not_uniform",
+	"button",
+	"delta_x",
+	"delta_y",
 	"expect",
+	"key",
 	"method",
 	"password",
+	"text",
 	"user",
+	"x",
+	"y",
 }
 
 func TestProjectionMatchesItsSchema(t *testing.T) {

@@ -20,6 +20,18 @@ all in its failure path.
 | `status` | the gateway's **own readiness view** — ready only when a DRM render node exists **and** the compositor has published a socket. Strictly more than "something answered on 8080". |
 | `login` | one PAM authentication through the **real session leader**. `expect: accept\|reject` makes the refusing case assertable, so a stack that accepts anything cannot pass. |
 | `frame` | a frame pulled back **through the negotiated WebRTC track** and written to a host `artifact:`, gated by `artifact_min_bytes` / `artifact_not_uniform`. |
+| `type` / `key` | `text:` typed as US-layout keys, or one X keysym `key:` (`Return`), sent **through the stream** the way the browser player sends it. Passes only when webrtcsink has answered every event. |
+| `move` / `click` / `scroll` | pointer input at `x:`/`y:` (stream pixels); `click` takes `button:` (1–3), `scroll` takes `delta_x:`/`delta_y:`. |
+
+`status` also reports the **encoder the streamer actually opened** (`"encoder":"hardware:nvh264enc"`) and the open `viewers`, so a step can assert hardware encode.
+
+The venue half of the verb ships here too:
+- the `cstream-probes` candy installs the login and frame probes, and `stream-probe`, the
+  streaming gate that maps a window on the streamer's own compositor. Disposable beds
+  run it as a `run:` step;
+- `cstream-probe-account` is a **bed-only** fixture that gives the runtime account a known password for `login`.
+
+The input methods run `cstream-input`, which ships with the streamer.
 
 Every method needs a **running deployment**; under `charly check box` (no running
 deployment) each reports `skip` rather than fail.

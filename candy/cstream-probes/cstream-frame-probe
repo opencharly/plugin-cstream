@@ -1,0 +1,112 @@
+#!/bin/bash
+# frame-probe — pull a frame back THROUGH the negotiated WebRTC track.
+#
+# This is the probe the cstream: verb ultimately exists for, and it is NOT the
+# same assertion as stream-probe:
+#
+#   * stream-probe reads the TAP on the producer's own pipeline
+#     (/tmp/cstream-frames). It proves the compositor and encoder produce
+#     changing content, and says nothing about whether any of it leaves the
+#     process.
+#   * wl: screenshot reads the COMPOSITOR. It cannot fail on an encoding or
+#     transport defect at all.
+#   * this probe decodes what a real consumer receives over WebRTC, so it fails
+#     on a broken encoder, a broken negotiation, or a broken transport --
+#     the class of defect the other two structurally cannot see.
+#
+# The defect it was written for is on record: gst-plugins-bad was missing, so
+# webrtcbin did not exist, and webrtcsink failed to build its session pipeline
+# with a WARN (`Failed to make element webrtcbin`). Every producer-side check
+# passed while not one byte of media reached a consumer.
+set -u
+
+OUT=${1:?usage: frame-probe <output-path>}
+SIGNALLING=${CSTREAM_SIGNALLING_URI:-ws://127.0.0.1:8443}
+# Long enough for negotiation plus a keyframe, short enough that a dead stream
+# fails the step rather than hanging the bed. This is a BOUND on a real wait,
+# not a sleep: the loop below exits as soon as a frame lands.
+DEADLINE=${CSTREAM_FRAME_TIMEOUT:-40}
+
+# charly's command: check does not surface stdout on failure, so the probe keeps
+# a transcript. Without it the only signal is "exit=1" and the cause has to be
+# guessed from outside the bed.
+exec > >(tee -a /tmp/frame-probe.log) 2>&1
+echo "=== frame-probe $(date -u +%H:%M:%S) -> $OUT ==="
+
+WORK=$(mktemp -d /tmp/frame-probe.XXXXXX)
+trap 'rm -rf "$WORK"' EXIT
+
+# Self-diagnosis: this probe runs under charly's in_container exec, which differs
+# from an interactive shell in uid and environment. Name the context rather than
+# leave a failure to be reproduced by hand.
+echo "FRAME-CTX: uid=$(id -u 2>/dev/null) signalling=$SIGNALLING deadline=${DEADLINE}s"
+echo "FRAME-CTX: webrtcbin=$(gst-inspect-1.0 webrtcbin >/dev/null 2>&1 && echo present || echo MISSING)"
+echo "FRAME-CTX: webrtcsrc=$(gst-inspect-1.0 webrtcsrc >/dev/null 2>&1 && echo present || echo MISSING)"
+
+# webrtcbin is what webrtcsink builds PER SESSION. Without it the session starts
+# and no media ever follows, with no ICE or DTLS error -- so name it here rather
+# than letting the probe time out with a generic "no frames".
+if ! gst-inspect-1.0 webrtcbin >/dev/null 2>&1; then
+    echo "FRAME-FAIL: webrtcbin is missing (gst-plugins-bad not installed) --"
+    echo "            webrtcsink cannot build a session pipeline, so no media can flow."
+    exit 1
+fi
+
+# connect-to-first-producer defaults to FALSE. Without it the consumer connects
+# to signalling and waits forever for a peer-id nobody supplies: no error, no
+# frame, a timeout indistinguishable from a dead stream.
+#
+# BOTH pads are consumed, by name. webrtcsrc exposes `video_%u` and `audio_%u` as
+# "Sometimes" pads, and a consumer must take everything the producer offers. Once
+# WP6 added an audio track, the bare `webrtcsrc ! videoconvert` form left the audio
+# pad dangling and the whole flow died with
+#
+#   streaming stopped, reason not-linked (-1)
+#
+# which reads like a transport fault and is really an unconsumed pad. It took the
+# VIDEO gate down: enabling audio broke the video PROBE, not the video path.
+# Measured on the live pod -- bare form: error, 14 frames then death; both pads
+# consumed: 1792 frames, no error.
+#
+# `audio-codecs="<>"` is NOT the fix; it was tried, the audio transport is still
+# built and the same not-linked error appears.
+#
+# The audio sink is `async=false`. The REQUESTED audio_0 pad exists whether or not
+# the producer sends audio, and a stream with audio OFF never delivers a buffer to
+# it: an async fakesink then never prerolls, the pipeline never reaches PLAYING, and
+# no video frame is written -- measured on a NVENC stream with CSTREAM_AUDIO unset:
+# 0 frames in 40 s; with async=false, 1188 frames in 20 s. async=false consumes
+# audio when it comes and does not hold the pipeline when it does not.
+timeout "$DEADLINE" gst-launch-1.0 -q \
+    webrtcsrc name=src signaller::uri="$SIGNALLING" connect-to-first-producer=true \
+    src.video_0 ! videoconvert ! jpegenc ! multifilesink location="$WORK/f-%05d.jpg" \
+    src.audio_0 ! fakesink async=false \
+    >"$WORK/gst.log" 2>&1 &
+GST=$!
+
+got=""
+for _ in $(seq 1 "$DEADLINE"); do
+    # Take the SECOND-newest frame: multifilesink is still writing the newest, so
+    # copying it can capture a truncated JPEG that fails a decode-based gate for
+    # a reason that has nothing to do with the stream.
+    n=$(ls -1 "$WORK"/*.jpg 2>/dev/null | wc -l)
+    if [ "$n" -ge 2 ]; then
+        got=$(ls -1t "$WORK"/*.jpg 2>/dev/null | sed -n 2p)
+        [ -s "$got" ] && break
+        got=""
+    fi
+    sleep 1
+done
+
+kill "$GST" 2>/dev/null
+wait "$GST" 2>/dev/null
+
+if [ -z "$got" ]; then
+    echo "FRAME-FAIL: no frame arrived over WebRTC within ${DEADLINE}s"
+    echo "--- consumer log ---"
+    tail -20 "$WORK/gst.log" 2>/dev/null
+    exit 1
+fi
+
+cp "$got" "$OUT"
+echo "FRAME-OK: $(stat -c%s "$OUT") bytes from $(ls -1 "$WORK"/*.jpg 2>/dev/null | wc -l) received"
