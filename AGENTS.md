@@ -3,10 +3,9 @@
 Standalone plugin repo for the `cstream:` check verb (`verb:cstream`) — the probes
 that can only be answered from the **stream** side of a cstream deployment. The
 plugin is a Go module at `candy/plugin-cstream/` (module path
-`github.com/opencharly/plugin-cstream/candy/plugin-cstream`). There is **no root
-`charly.yml`**, so `charly box validate` at the repo root has no project manifest to
-parse; the candy is validated from a staging project that carries a `discover:`
-block.
+`github.com/opencharly/plugin-cstream/candy/plugin-cstream`). A root
+`charly.yml` carries `discover: - path: candy`, so `charly box validate` at the repo
+root scans every candy in `candy/` and gates all of them (opencharly/charly#459).
 
 This repo has **no `skill:` entity** in its candy manifest, so there is no dedicated
 owning skill projected into the marketplace corpus. The gap is recorded against
@@ -17,7 +16,17 @@ Canonical files:
 - `candy/plugin-cstream/charly.yml` — the `plugin-cstream:` candy entity (`plugin:`
   block, `primary:`, the `plan:` check).
 - `candy/plugin-cstream/provider.go` — the `Invoke` dispatch and the box-mode skip.
-- `candy/plugin-cstream/methods.go` — the `status` / `login` / `frame` methods.
+- `candy/plugin-cstream/methods.go` holds the methods:
+  - `status`, `login` and `frame`;
+  - the input methods `type`, `key`, `move`, `click` and `scroll`, which drive the
+    venue's `cstream-input`.
+- `candy/cstream-probes/` — the verb's VENUE half: `cstream-login-probe`,
+  `cstream-frame-probe` and `stream-probe`, installed by the `cstream-probes` candy so a
+  method and the script it runs live in one repo (R2). `stream-probe` maps a window on
+  the streamer's own compositor, so a bed may run it only as a `run:` step; it never
+  belongs in a baked plan that `charly check live` runs against real deployments.
+- `candy/cstream-probe-account/` — the BED-ONLY fixture giving the runtime account a
+  known password for `cstream: login`.
 - `candy/plugin-cstream/schema/cstream.cue` — the self-contained `#CstreamInput`.
 - `candy/plugin-cstream/schema_contract_test.go` — the CUE↔Go drift tests.
 - `.github/workflows/tag-on-merge.yml` — CalVer tag + `CHANGELOG/` on merge.
@@ -36,17 +45,17 @@ Canonical files:
 
 - `go build ./...`, `go vet ./...`, `go test ./...` in `candy/plugin-cstream/` —
   compile, vet, and run the `schema_contract_test.go` drift tests.
-- There is **no root `charly.yml`**, so `charly box validate` at the repo root
-  parses nothing and the org-wide candy gate
-  (`opencharly/.github/.github/workflows/candy-validate.yml`) **skips cleanly**.
-  The manifest is gated only from a consumer project that has this candy in scan
-  range (the `check-cstream-pod` witness box), which is what catches a malformed
-  `plugin:` block.
+- `charly box validate` at the repo root, with the root `charly.yml`'s
+  `discover: - path: candy`, gates the plugin, `cstream-probes` and
+  `cstream-probe-account` together (3 candies; the CUE schema gate applies to
+  `plugin:` blocks). Before that file existed the repo was project-less and the
+  stock gate asserted nothing (opencharly/charly#459).
 - The merge gate is the **org-wide** `charly/pr-validator` (required check
   `validate / validate`, defined in `opencharly/.github`); this repo has **no**
   per-repo candy gate.
-- R10 consumer: the `check-cstream-pod` bed in `opencharly/distro-cachyos`, whose
-  witness box composes this candy.
+- R10 consumer: the `check-kde-cstream-pod` and `check-kde-cstream-browser` beds in
+  `opencharly/pod-kde-cstream`, whose box composes the plugin, `cstream-probes` and
+  `cstream-probe-account`.
 
 ## Modify this repo
 

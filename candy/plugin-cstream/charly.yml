@@ -16,13 +16,16 @@ plugin-cstream:
             `wl:` would produce a probe that cannot fail on the bug it was written
             for.
 
-            SCOPE IS DELIBERATELY NARROW — three methods, not the eleven the
-            architecture eventually wants. `status`, `frame` and `login` are served
-            because the deployment can actually answer them today. `session-list`,
-            `stats`, `volume`, `clipboard`, `idle`, `input` and `logout` are NOT:
-            the streamer has no control surface behind them yet, and a method that
-            cannot be exercised reads as coverage while providing none. They arrive
-            with the ctl socket.
+            SCOPE IS DELIBERATELY NARROW.
+            - Served, because the deployment can actually answer them:
+              - `status`, `frame` and `login`;
+              - the input methods `type`, `key`, `move`, `click` and `scroll`. These
+                drive the desktop through the stream exactly as a browser viewer does
+                (cstream-input joins over WebRTC and sends the player's control-channel
+                JSON). Each passes only once webrtcsink has answered every event.
+            - NOT served: `session-list`, `stats`, `volume`, `clipboard`, `idle` and
+              `logout`. The streamer has no control surface behind them yet, and a
+              method that cannot be exercised reads as coverage while providing none.
 
             The plugin owns no podman/venue machinery. It uses BOTH reverse legs
             because the two halves of the deployment are reachable differently:

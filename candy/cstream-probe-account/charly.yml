@@ -1,0 +1,51 @@
+cstream-probe-account:
+    candy:
+        description: |
+            BED FIXTURE ONLY -- never composed into a shipped box.
+
+            A login gate needs an account whose password is known, and it must be
+            THIS container's own runtime account. Both halves are forced by measured
+            behaviour, not preference:
+
+            - pam_unix delegates to the setuid helper `unix_chkpwd` whenever euid is
+              not 0, and that helper only ever verifies the CALLING user's own
+              account. Authenticating any OTHER user therefore fails with
+              "Authentication service cannot retrieve authentication info"
+              regardless of the password -- which would make BOTH legs of a login
+              gate fail, and a reject-leg that passes for the wrong reason is worse
+              than no gate at all.
+            - a rootless pod execs as uid 1000 with an empty capability set, so
+              `useradd` at runtime fails ("cannot lock /etc/passwd") and no amount of
+              cap_add fixes the euid test above (measured: CAP_DAC_READ_SEARCH makes
+              /etc/shadow readable and pam_unix still uses the helper).
+
+            So the fixture sets a password on the account the bed already runs as,
+            at BUILD time where steps run as root. Cross-user authentication -- what
+            the production broker does, as root -- is the VM bed's gate, not this one.
+
+            The credential is deliberately in the clear: it exists so a disposable
+            bed can prove PAM accepts the right password and refuses a wrong one.
+            It must never be composed into an image anyone deploys. It lives with the
+            `cstream:` verb whose `login` method it exists for, and only a disposable
+            bed's box composes it.
+        plan:
+            - run: give the container's own runtime account a known password
+              command: |
+                set -e
+                # The runtime account is created by the init layer, not here; this
+                # step only gives the existing account a credential.
+                id user >/dev/null
+                echo 'user:cstream-bed-pw' | chpasswd
+              run_as: root
+            - check: the runtime account exists and is the one the bed will authenticate
+              id: probe-account-exists
+              exit_status: 0
+              command: getent passwd user >/dev/null && echo PROBE-ACCOUNT-OK
+              stdout:
+                - contains: PROBE-ACCOUNT-OK
+            - check: the runtime account has a home directory to open a session into
+              id: probe-account-home
+              exit_status: 0
+              command: test -d "${HOME}" && echo PROBE-HOME-OK
+              stdout:
+                - contains: PROBE-HOME-OK

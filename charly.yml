@@ -1,0 +1,13 @@
+# Makes this plugin repo a PROJECT so its candies are actually gated.
+#
+# Without a root charly.yml the repo is "project-less": charly scans NO candies at all,
+# so `charly box validate` at the repo root exits 0 on ANY manifest, including one with a
+# malformed `plugin.providers` entry — the stock candy CI step asserted nothing
+# (opencharly/charly#459, fixed the same way in opencharly/plugin-gpu).
+#
+# The repo now holds three candies, not one: the plugin itself, the venue probes it
+# executes (`cstream-probes`), and the bed-only login fixture (`cstream-probe-account`,
+# opencharly/sdk#598's one-owner-per-verb rule). None of them was gated before this file.
+discover:
+    - path: candy
+      recursive: true

@@ -3,8 +3,8 @@ module github.com/opencharly/plugin-cstream/candy/plugin-cstream
 go 1.26.8
 
 require (
-	github.com/opencharly/sdk v0.2026320.1345
-	github.com/opencharly/spec v0.2026320.1252
+	github.com/opencharly/sdk v0.2026324.8
+	github.com/opencharly/spec v0.2026324.636
 )
 
 require (

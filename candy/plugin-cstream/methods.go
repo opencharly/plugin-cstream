@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/opencharly/plugin-cstream/candy/plugin-cstream/params"
@@ -24,6 +25,8 @@ func dispatch(ctx context.Context, req *pb.InvokeRequest, op *spec.Op, in *param
 		return loginMethod(ctx, req, in)
 	case "frame":
 		return frameMethod(ctx, req, in)
+	case "type", "key", "move", "click", "scroll":
+		return inputMethod(ctx, req, in)
 	default:
 		return "", fmt.Errorf("cstream: unknown method %q", in.Method)
 	}
@@ -149,4 +152,65 @@ func frameMethod(ctx context.Context, req *pb.InvokeRequest, in *params.CstreamI
 	}
 	_ = ex.VenueRunSilent(ctx, "rm -f "+shellQuote(frameVenuePath))
 	return fmt.Sprintf("%s\ncstream: frame saved to %s (%d bytes)", out, in.Artifact, len(data)), nil
+}
+
+// inputBinary is the venue-side stream client the input methods drive. It ships with
+// the streamer (charly-streamer's cstream-input) because it IS a viewer of that
+// stream: it joins over WebRTC and sends the browser player's control-channel JSON.
+const inputBinary = "/usr/local/bin/cstream-input"
+
+// inputArgs renders one input method as cstream-input's action argument.
+//
+// Each method names exactly the fields it uses, and a missing one is an authoring
+// error here rather than a probe that silently sends nothing.
+func inputArgs(in *params.CstreamInput) (string, error) {
+	num := func(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+	switch in.Method {
+	case "type":
+		if in.Text == "" {
+			return "", fmt.Errorf("cstream: type needs text")
+		}
+		return "type=" + in.Text, nil
+	case "key":
+		if in.Key == "" {
+			return "", fmt.Errorf("cstream: key needs a key (an X keysym name such as Return)")
+		}
+		return "key=" + in.Key, nil
+	case "move":
+		return "move=" + num(in.X) + "," + num(in.Y), nil
+	case "click":
+		button := in.Button
+		if button == 0 {
+			button = 1
+		}
+		return fmt.Sprintf("click=%s,%s,%d", num(in.X), num(in.Y), button), nil
+	case "scroll":
+		if in.DeltaX == 0 && in.DeltaY == 0 {
+			return "", fmt.Errorf("cstream: scroll needs delta_x or delta_y")
+		}
+		return "scroll=" + num(in.X) + "," + num(in.Y) + "," + num(in.DeltaX) + "," + num(in.DeltaY), nil
+	}
+	return "", fmt.Errorf("cstream: %q is not an input method", in.Method)
+}
+
+// inputMethod drives the desktop through the stream. It succeeds only when
+// cstream-input reports every event ANSWERED by webrtcsink (which answers after
+// pushing the event to the source), so a pass means delivered, not merely sent.
+func inputMethod(ctx context.Context, req *pb.InvokeRequest, in *params.CstreamInput) (string, error) {
+	action, err := inputArgs(in)
+	if err != nil {
+		return "", err
+	}
+	ex, err := sdk.ExecutorFromInvoke(req.GetExecutorBrokerId())
+	if err != nil {
+		return "", fmt.Errorf("cstream: %s has no host executor attached (%w)", in.Method, err)
+	}
+	out, err := ex.VenueCapture(ctx, inputBinary+" "+shellQuote(action))
+	if err != nil {
+		return out, fmt.Errorf("cstream: %s: %w", in.Method, err)
+	}
+	if !strings.Contains(out, "CSTREAM-INPUT-DELIVERED") {
+		return out, fmt.Errorf("cstream: %s: cstream-input exited 0 without confirming delivery", in.Method)
+	}
+	return out, nil
 }

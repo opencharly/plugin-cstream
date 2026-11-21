@@ -1,0 +1,55 @@
+cstream-probes:
+    candy:
+        description: |
+            The venue half of the `cstream:` check verb: the two probes the verb runs
+            INSIDE a cstream deployment, installed by the same repo that serves the
+            verb so a method and the script it executes cannot drift apart.
+
+            - cstream-login-probe authenticates one credential through the real
+              session leader (`cstream: login`) and maps the leader's exit code onto
+              the step's expectation, so the REJECT leg is assertable.
+            - cstream-frame-probe joins the stream as a WebRTC consumer and writes
+              a decoded frame (`cstream: frame`), so a broken encoder, negotiation
+              or transport fails it -- the class of defect a compositor screenshot
+              or the producer's own tap cannot see.
+            - stream-probe proves the stream carries LIVE compositor content: it maps a
+              window on the streamer's own compositor and asserts the frame tap
+              changes. It MUTATES the desktop (a window maps over it and takes focus),
+              so it belongs only to a disposable bed's `run:` step -- which is why it
+              lives here, in the bed-only probes, and not in the cstream server image.
+
+            The input methods (`type`, `key`, `move`, `click`, `scroll`) run
+            cstream-input, which ships with the streamer itself (charly-streamer),
+            because it is a viewer of that stream. Composing this candy without a
+            cstream server makes every probe fail with its own named cause.
+        plan:
+            - run: mkdir=/usr/local/bin
+              mkdir: /usr/local/bin
+              run_as: root
+            - run: stage the login probe
+              copy: cstream-login-probe
+              to: /usr/local/bin/cstream-login-probe
+              mode: "0755"
+              run_as: root
+            - run: stage the frame probe that pulls back through the WebRTC track
+              copy: cstream-frame-probe
+              to: /usr/local/bin/cstream-frame-probe
+              mode: "0755"
+              run_as: root
+            - run: stage the stream-liveness probe -- bed-only, it maps a window
+              copy: stream-probe
+              to: /usr/local/bin/stream-probe
+              mode: "0755"
+              run_as: root
+            - check: the verb's venue probes are installed and executable
+              id: cstream-probes-installed
+              exit_status: 0
+              command: test -x /usr/local/bin/cstream-login-probe && test -x /usr/local/bin/cstream-frame-probe && test -x /usr/local/bin/stream-probe && echo PROBES-OK
+              stdout:
+                - contains: PROBES-OK
+            - check: the frame probe consumes an audio pad without waiting on it, so an audio-less stream still yields frames
+              id: cstream-frame-probe-audio-async
+              file:
+                file: /usr/local/bin/cstream-frame-probe
+                contains:
+                    - contains: "src.audio_0 ! fakesink async=false"

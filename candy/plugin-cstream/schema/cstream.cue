@@ -32,11 +32,40 @@
 	// with a WARN -- sessions negotiated, no media followed, and no ICE or DTLS
 	// error surfaced. Producer-side checks all passed throughout.
 	//
+	//   type / key / move / click / scroll
+	//           drive the desktop THROUGH the stream, the way a browser viewer does:
+	//           the venue's `cstream-input` joins as a WebRTC consumer and sends the
+	//           player's exact control-channel JSON, which webrtcsink turns into
+	//           GstNavigation events for waylanddisplaysrc's seat. Each succeeds
+	//           only when webrtcsink has ANSWERED every event, and it answers after
+	//           pushing the event to the source -- so a method that returns 0 was
+	//           delivered, not merely sent. Whether the desktop DID something with
+	//           it is the bed's next assertion (a marker the typed command creates).
+	//
 	// Methods the architecture also lists (session-list, stats, volume, clipboard,
-	// idle, input, logout) are NOT served yet: the control surface they read does
-	// not exist in the streamer, and a method that cannot be exercised reads as
+	// idle, logout) are NOT served yet: the control surface they read does not
+	// exist in the streamer, and a method that cannot be exercised reads as
 	// coverage while providing none.
-	method: "status" | "login" | "frame"
+	method: "status" | "login" | "frame" | "type" | "key" | "move" | "click" | "scroll"
+
+	// text — `type` only: typed as US-layout physical keys (Shift where needed).
+	text?: string
+
+	// key — `key` only: one X keysym name, pressed and released (`Return`, `Escape`,
+	// `F5`, `a`). The names are waylanddisplaysrc's keysym table.
+	key?: string
+
+	// x / y — `move`, `click`, `scroll`: stream (desktop) pixel coordinates.
+	x?: number @go(X,type=float64)
+	y?: number @go(Y,type=float64)
+
+	// button — `click` only: 1 left (default), 2 middle, 3 right.
+	button?: int & >=1 & <=3 @go(Button,type=int)
+
+	// delta_x / delta_y — `scroll` only: 120 per wheel notch, positive = up/left (GStreamer's
+	// sink convention, which the gst-wayland-display element maps onto the seat's wheel axis).
+	delta_x?: number @go(DeltaX,type=float64)
+	delta_y?: number @go(DeltaY,type=float64)
 
 	// user / password — `login` only.
 	//
